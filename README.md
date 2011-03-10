@@ -13,6 +13,14 @@ currently it does not do this. what it does do:
 
 It uses sqlite3 to store the data which is inefficient for large datasets.
 
+installation
+------------
+
+Tested on a homebrew python install on Mac OSX. 
+You need the following python modules:
+* iso8601
+* hurry.filesize
+
 roadmap
 -------
 next version will:
