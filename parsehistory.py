@@ -231,9 +231,10 @@ def end_element(name):
 				size(fsize)
 			))
 		else:
-			sys.stdout.write("\rnodes: %ik - ways: %ik - elapsed: %02d:%02d:%02d - file size %s      " % (
+			sys.stdout.write("\rnodes: %ik - ways: %ik - rels: %ik - elapsed: %02d:%02d:%02d - file size %s      " % (
 				(nnc+len(nn))/1000,
 				(wwc+len(ww))/1000,
+				(rrc+len(rr))/1000,
 				hours,
 				minutes,
 				seconds,
