@@ -1,7 +1,9 @@
 osmhistoryparser
 ================
 
-The goal of this script is to parse full osm history files as published on http://planet.openstreetmap.org/full-experimental/ and drop them into a database, recreating all the features.
+The goal of this script is to parse full osm history files as published on http://planet.openstreetmap.org/full-experimental/ and drop them into a database, recreating all the features and their previous versions correctly.
+
+Currently there is an experimental osmosis plugin that does this but I'm not very good at writing java so I started this.
 
 status
 ------
