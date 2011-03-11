@@ -9,6 +9,11 @@ from hurry.filesize import size
 import bz2
 import gzip
 import string
+import psycopg2
+import psycopg2.extras
+
+VERSION="0.2"
+PGSQL= True
 
 starttime = datetime.datetime.now() 
 
@@ -41,7 +46,7 @@ def dump(obj):
 	for attr in dir(obj):
 		print "obj.%s = %s" % (attr, getattr(obj, attr))
 
-def create_tables():
+def create_tables_sqlite():
 	c = conn.cursor()
 	c.execute('drop table if exists nodes')
 	c.execute('drop table if exists tags')
@@ -56,6 +61,15 @@ def create_tables():
 	conn.commit()
 	print "all tables created"
 	c.close()
+
+def create_tables_pgsql():
+	with open('pgsql_simple_schema_0.6.sql', 'r') as f: #this is the same schema that osmosis uses. 
+		sql = f.read()
+	c = conn.cursor()
+	c.execute(sql)
+	conn.commit()
+	print "all tables created"
+	c.close()
 	
 def insert_node(n): #deprecated
 	c = conn.cursor()
@@ -64,16 +78,23 @@ def insert_node(n): #deprecated
 		c.execute('insert into tags values(?,?,?)',(n.id,k,v))
 	conn.commit()
 	c.close()
+	
+def postgis_point(lon,lat):
+	return "ST_SetSRID(ST_MakePoint(%s, %s), 4326)" % (lon,lat)
 
 def insert_nodes(nn):
 	global nnc
 	c = conn.cursor()
 	tagcount=0
 	for n in nn:
-		c.execute('insert into nodes values(?,?,?,?,?,?,?,?)',(n.lat,n.lon,n.version,n.uid,n.user,n.id,n.timestamp,n.changeset))
-		for k,v in n.tags.iteritems():
-			c.execute('insert into tags values(?,?,?)',(n.id,k,v))
-			tagcount+=1
+		if PGSQL:
+			print 'INSERT INTO nodes VALUES(%s,%s,%s,%s,%s,%s,%s)' % (n.id,n.version,n.uid,n.timestamp,n.changeset,n.tags,postgis_point(n.lon,n.lat))
+			c.execute('INSERT INTO nodes VALUES(%s,%s,%s,%s,%s,%s,%s)',(n.id,n.version,n.uid,n.timestamp,n.changeset,n.tags,postgis_point(n.lon,n.lat)))
+		else:
+			c.execute('insert into nodes values(?,?,?,?,?,?,?,?)',(n.lat,n.lon,n.version,n.uid,n.user,n.timestamp,n.changeset))
+			for k,v in n.tags.iteritems():
+				c.execute('insert into tags values(?,?,?)',(n.id,k,v))
+				tagcount+=1
 	conn.commit()
 	c.close()
 	#print "%i nodes and %i tags inserted..." % (len(nn),tagcount)
@@ -248,6 +269,7 @@ def char_data(data):
 	#print 'Character data:', repr(data)
 	del data
 
+
 if len(sys.argv) == 1:
 	print "please supply at least an input file."
 	usage()
@@ -258,7 +280,6 @@ if not path.exists(ourpath):
 	print "file does not exist: %s" % ourpath
 	usage()
 	exit()
-
 
 print "going to parse %s" % ourpath
 
@@ -284,7 +305,10 @@ if len(sys.argv) == 3:
 else:
 	dbpath = 'osmhistory.db'
 
-conn = sqlite3.connect(dbpath)
+dbpath = 'osmhistory.db'
+#conn = sqlite3.connect(dbpath)
+conn = psycopg2.connect("dbname=osm user=mvexel")
+psycopg2.extras.register_hstore(conn)
 
 p = xml.parsers.expat.ParserCreate()
 
@@ -292,7 +316,7 @@ p.StartElementHandler = start_element
 p.EndElementHandler = end_element
 p.CharacterDataHandler = char_data
 
-create_tables()
+create_tables_pgsql()
 
 #path = "/Users/mvexel/osm/planet/andorra.osm.bz2"
 p.ParseFile(f)
