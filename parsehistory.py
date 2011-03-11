@@ -262,11 +262,11 @@ if not path.exists(ourpath):
 
 print "going to parse %s" % ourpath
 
-if string.index(ourpath,".bz2") :
+if ourpath.find(".bz2") + 1:
 	f = bz2.BZ2File(ourpath)
-elif string.index(ourpath,".gz") or string.index(ourpath,".gzip"):
+elif ourpath.find(".gz") + 1 or ourpath.find(".gzip") + 1:
 	f = gzip.GzipFile(ourpath)
-elif string.index(ourpath,".osm") or sting.index(ourpath,".xml") :
+elif ourpath.find(".osm") + 1 or ourpath.find(".xml") + 1 :
 	f = open(ourpath)
 else:
 	print "filetype is probably not supported, use .gz, .bz2, .osm or .xml"
