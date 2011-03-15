@@ -39,12 +39,12 @@ class node(object):
 		self._lat = None
 		self._lon = None
 		self._version = None
-		self._uid = None
+		self._user_id = None
 		self._user = None
 		self._id = None
 		self._tags = {}
 		self._timestamp = None
-		self._changeset = None
+		self._changeset_id = None
 		self._visible = None
 
 	def getlat(self):
@@ -71,13 +71,13 @@ class node(object):
 		del self._version
 	version = property(getversion, setversion, delversion, "version")
 
-	def getuid(self):
-		return self._uid
-	def setuid(self, value):
-		self._uid = value
-	def deluid(self):
-		del self._uid
-	uid = property(getuid, setuid, deluid, "user id")
+	def getuser_id(self):
+		return self._user_id
+	def setuser_id(self, value):
+		self._user_id = value
+	def deluser_id(self):
+		del self._user_id
+	user_id = property(getuser_id, setuser_id, deluser_id, "user id")
 
 	def getuser(self):
 		return self._user
@@ -116,13 +116,13 @@ class node(object):
 		del self._timestamp
 	timestamp = property(gettimestamp, settimestamp, deltimestamp, "timestamp")
 
-	def getchangeset(self):
-		return self._changeset
-	def setchangeset(self, value):
-		self._changeset = value
-	def delchangeset(self):
-		del self._changeset
-	changeset = property(getchangeset, setchangeset, delchangeset, "changeset")
+	def getchangeset_id(self):
+		return self._changeset_id
+	def setchangeset_id(self, value):
+		self._changeset_id = value
+	def delchangeset_id(self):
+		del self._changeset_id
+	changeset_id = property(getchangeset_id, setchangeset_id, delchangeset_id, "changeset_id")
 
 	def getvisible(self):
 		return self._visible
@@ -135,13 +135,13 @@ class node(object):
 class way(object):
 	def __init__(self):
 		self._version = None
-		self._uid = None
+		self._user_id = None
 		self._user = None
 		self._id = None
 		self._tags = {}
 		self._noderefs = []
 		self._timestamp = None
-		self._changeset = None
+		self._changeset_id = None
 		self._visible = None
 
 	def getversion(self):
@@ -152,13 +152,13 @@ class way(object):
 		del self._version
 	version = property(getversion, setversion, delversion, "version")
 
-	def getuid(self):
-		return self._uid
-	def setuid(self, value):
-		self._uid = value
-	def deluid(self):
-		del self._uid
-	uid = property(getuid, setuid, deluid, "user id")
+	def getuser_id(self):
+		return self._user_id
+	def setuser_id(self, value):
+		self._user_id = value
+	def deluser_id(self):
+		del self._user_id
+	user_id = property(getuser_id, setuser_id, deluser_id, "user id")
 
 	def getuser(self):
 		return self._user
@@ -206,13 +206,13 @@ class way(object):
 		del self._timestamp
 	timestamp = property(gettimestamp, settimestamp, deltimestamp, "timestamp")
 
-	def getchangeset(self):
-		return self._changeset
-	def setchangeset(self, value):
-		self._changeset = value
-	def delchangeset(self):
-		del self._changeset
-	changeset = property(getchangeset, setchangeset, delchangeset, "changeset")
+	def getchangeset_id(self):
+		return self._changeset_id
+	def setchangeset_id(self, value):
+		self._changeset_id = value
+	def delchangeset_id(self):
+		del self._changeset_id
+	changeset_id = property(getchangeset_id, setchangeset_id, delchangeset_id, "changeset_id")
 
 	def getvisible(self):
 		return self._visible
@@ -225,13 +225,13 @@ class way(object):
 class relation(object):
 	def __init__(self):
 		self._version = None
-		self._uid = None
+		self._user_id = None
 		self._user = None
 		self._id = None
 		self._tags = {}
 		self._members = []
 		self._timestamp = None
-		self._changeset = None
+		self._changeset_id = None
 
 	def getversion(self):
 		return self._version
@@ -241,13 +241,13 @@ class relation(object):
 		del self._version
 	version = property(getversion, setversion, delversion, "version")
 
-	def getuid(self):
-		return self._uid
-	def setuid(self, value):
-		self._uid = value
-	def deluid(self):
-		del self._uid
-	uid = property(getuid, setuid, deluid, "user id")
+	def getuser_id(self):
+		return self._user_id
+	def setuser_id(self, value):
+		self._user_id = value
+	def deluser_id(self):
+		del self._user_id
+	user_id = property(getuser_id, setuser_id, deluser_id, "user id")
 
 	def getuser(self):
 		return self._user
@@ -295,13 +295,13 @@ class relation(object):
 		del self._timestamp
 	timestamp = property(gettimestamp, settimestamp, deltimestamp, "timestamp")
 
-	def getchangeset(self):
-		return self._changeset
-	def setchangeset(self, value):
-		self._changeset = value
-	def delchangeset(self):
-		del self._changeset
-	changeset = property(getchangeset, setchangeset, delchangeset, "changeset")
+	def getchangeset_id(self):
+		return self._changeset_id
+	def setchangeset_id(self, value):
+		self._changeset_id = value
+	def delchangeset_id(self):
+		del self._changeset_id
+	changeset_id = property(getchangeset_id, setchangeset_id, delchangeset_id, "changeset_id")
 
 	def getvisible(self):
 		return self._visible

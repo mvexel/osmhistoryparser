@@ -53,10 +53,10 @@ def create_tables_sqlite():
 	c.execute('drop table if exists ways')
 	c.execute('drop table if exists relations')
 	c.execute('drop table if exists members')
-	c.execute('create table nodes(lat real, lon real, version int, uid int, user text, id int, timestamp integer, changeset integer)')
-	c.execute('create table ways(version int, uid int, user text, id int, timestamp integer, changeset integer)')
+	c.execute('create table nodes(lat real, lon real, version int, user_id int, user text, id int, timestamp integer, changeset_id integer)')
+	c.execute('create table ways(version int, user_id int, user text, id int, timestamp integer, changeset_id integer)')
 	c.execute('create table tags(feature_id int, k text, v text)')
-	c.execute('create table relations(version int, uid int, user text, id int, timestamp integer, changeset integer)')
+	c.execute('create table relations(version int, user_id int, user text, id int, timestamp integer, changeset_id integer)')
 	c.execute('create table members(relation_id int, type text, ref int, role text)')
 	conn.commit()
 	print "all tables created"
@@ -73,7 +73,7 @@ def create_tables_pgsql():
 	
 def insert_node(n): #deprecated
 	c = conn.cursor()
-	c.execute('insert into nodes values(?,?,?,?,?,?,?,?)',(n.lat,n.lon,n.version,n.uid,n.user,n.id,n.timestamp,n.changeset))
+	c.execute('insert into nodes values(?,?,?,?,?,?,?,?)',(n.lat,n.lon,n.version,n.user_id,n.user,n.id,n.timestamp,n.changeset_id))
 	for k,v in n.tags.iteritems():
 		c.execute('insert into tags values(?,?,?)',(n.id,k,v))
 	conn.commit()
@@ -88,10 +88,10 @@ def insert_nodes(nn):
 	tagcount=0
 	for n in nn:
 		if PGSQL:
-			print 'INSERT INTO nodes VALUES(%s,%s,%s,%s,%s,%s,%s)' % (n.id,n.version,n.uid,n.timestamp,n.changeset,n.tags,postgis_point(n.lon,n.lat))
-			c.execute('INSERT INTO nodes VALUES(%s,%s,%s,%s,%s,%s,%s)',(n.id,n.version,n.uid,n.timestamp,n.changeset,n.tags,postgis_point(n.lon,n.lat)))
+			SQL = "INSERT INTO nodes VALUES(%s,%s,%s,%s,%s,%s," + postgis_point(n.lon,n.lat) + ");"
+			c.execute(SQL,(n.id,n.version,n.user_id,n.timestamp,n.changeset_id,n.tags))
 		else:
-			c.execute('insert into nodes values(?,?,?,?,?,?,?,?)',(n.lat,n.lon,n.version,n.uid,n.user,n.timestamp,n.changeset))
+			c.execute('insert into nodes values(?,?,?,?,?,?,?,?)',(n.lat,n.lon,n.version,n.user_id,n.user,n.timestamp,n.changeset_id))
 			for k,v in n.tags.iteritems():
 				c.execute('insert into tags values(?,?,?)',(n.id,k,v))
 				tagcount+=1
@@ -106,7 +106,7 @@ def insert_ways(ww):
 	tagcount = 0
 	c = conn.cursor()
 	for w in ww:
-		c.execute('insert into ways values(?,?,?,?,?,?)',(w.version,w.uid,w.user,w.id,w.timestamp,w.changeset))
+		c.execute('insert into ways values(?,?,?,?,?,?)',(w.version,w.user_id,w.user,w.id,w.timestamp,w.changeset_id))
 		for k,v in w.tags.iteritems():
 			c.execute('insert into tags values(?,?,?)',(w.id,k,v))
 			tagcount+=1
@@ -122,7 +122,7 @@ def insert_relations(rr):
 	membercount=0
 	c = conn.cursor()
 	for r in rr:
-		c.execute('insert into relations values(?,?,?,?,?,?)',(r.version,r.uid,r.user,r.id,r.timestamp,r.changeset))
+		c.execute('insert into relations values(?,?,?,?,?,?)',(r.version,r.user_id,r.user,r.id,r.timestamp,r.changeset_id))
 		for k,v in r.tags.iteritems():
 			c.execute('insert into tags values(?,?,?)',(r.id,k,v))
 			tagcount+=1
@@ -145,33 +145,33 @@ def start_element(name, attrs):
 		n.lat = 'lat' in attrs and attrs['lat']
 		n.lon = 'lon' in attrs and attrs['lon']
 		n.version = 'version' in attrs and attrs['version']
-		n.uid = 'uid' in attrs and attrs['uid']
+		n.user_id = 'user_id' in attrs and attrs['user_id']
 		n.user = 'user' in attrs and attrs['user']
 		n.id = 'id' in attrs and attrs['id']
 		n.timestamp = 'timestamp' in attrs and iso8601.parse_date(attrs['timestamp'])
-		n.changeset = 'changeset' in attrs and attrs['changeset']
+		n.changeset_id = 'changeset_id' in attrs and attrs['changeset_id']
 	if name == 'way':
 		#print 'way start:', attrs['id']
 		#print 'node:', attrs
 		parsing_way=True
 		w = way();
 		w.version = 'version' in attrs and attrs['version']
-		w.uid = 'uit' in attrs and attrs['uid']
+		w.user_id = 'uit' in attrs and attrs['user_id']
 		w.user = 'user' in attrs and attrs['user']
 		w.id = 'id' in attrs and attrs['id']
 		w.timestamp = 'timestamp' in attrs and iso8601.parse_date(attrs['timestamp'])
-		w.changeset = 'changeset' in attrs and attrs['changeset']
+		w.changeset_id = 'changeset_id' in attrs and attrs['changeset_id']
 	if name == 'relation':
 		#print 'relation start:', attrs['id']
 		#print 'node:', attrs
 		parsing_relation=True
 		r = relation();
 		r.version = 'version' in attrs and attrs['version']
-		r.uid = 'uit' in attrs and attrs['uid']
+		r.user_id = 'uit' in attrs and attrs['user_id']
 		r.user = 'user' in attrs and attrs['user']
 		r.id = 'id' in attrs and attrs['id']
 		r.timestamp = 'timestamp' in attrs and iso8601.parse_date(attrs['timestamp'])
-		r.changeset = 'changeset' in attrs and attrs['changeset']
+		r.changeset_id = 'changeset_id' in attrs and attrs['changeset_id']
 	if name == 'tag':
 		#print '\ttag start:', attrs['k']
 		if parsing_node and not n:
