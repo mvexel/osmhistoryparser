@@ -9,6 +9,7 @@ from hurry.filesize import size
 import bz2
 import gzip
 import string
+import argparse
 
 starttime = datetime.datetime.now() 
 
@@ -186,7 +187,7 @@ def start_element(name, attrs):
 			r.members.append(m)
 			
 def end_element(name):
-	global n,parsing_node,w,parsing_way,r,parsing_relation,nn,nnc,ww,wwc,rr,rrc,dbpath
+	global n,parsing_node,w,parsing_way,r,parsing_relation,nn,nnc,ww,wwc,rr,rrc,options
 	if name == 'node':
 		#print 'node end:', n.id
 		#dump(n)
@@ -214,7 +215,7 @@ def end_element(name):
 #	print "nodes in memory: %i - ways in memory: %i" %	(len(nn),len(ww))
 	if not (len(nn) + len(ww)) % 1000:
 		#print "HIT nodes in memory: %i - ways in memory: %i" % (len(nn),len(ww))
-		fsize = float(path.getsize(dbpath))
+		fsize = float(path.getsize(path.abspath(options.outfile)))
 		difference = datetime.datetime.now() - starttime
 		weeks, days = divmod(difference.days, 7)
 		minutes, seconds = divmod(difference.seconds, 60)
@@ -248,43 +249,64 @@ def char_data(data):
 	#print 'Character data:', repr(data)
 	del data
 
-if len(sys.argv) == 1:
-	print "please supply at least an input file."
-	usage()
-	exit()
-	
-ourpath = sys.argv[1]
-if not path.exists(ourpath):
-	print "file does not exist: %s" % ourpath
-	usage()
-	exit()
+parser = argparse.ArgumentParser(description='OpenStreetMap full history planet parser.')
+parser.add_argument('infile')
+parser.add_argument('outfile',nargs='?', default='osm.db',help='path to SQLite data file (SQLite only)')
+parser.add_argument('-d','--database',default='osm')
+parser.add_argument('-U','--username',metavar='username',default='osm',help='PostgreSQL database user')
+parser.add_argument('-W','--password',metavar='password',default='osm',help='PostgreSQL database password')
+parser.add_argument('-H','--host',metavar='host',default='localhost',help='PostgreSQL database host')
+parser.add_argument('-P','--port',metavar='port',help='PostgreSQL database port')
+parser.add_argument('-O','--output',metavar='outputformat',default='sqlite',choices=('sqlite','pgsql'),help='Output format (SQLite or PostGIS)')
+parser.add_argument('-k','--hstore',action='store_true',help='Add hstore column for tags, only for PostGIS')
 
+options=parser.parse_args()
 
-print "going to parse %s" % ourpath
-
-if ourpath.find(".bz2") + 1:
-	f = bz2.BZ2File(ourpath)
-elif ourpath.find(".gz") + 1 or ourpath.find(".gzip") + 1:
-	f = gzip.GzipFile(ourpath)
-elif ourpath.find(".osm") + 1 or ourpath.find(".xml") + 1 :
-	f = open(ourpath)
+if(options.output=='pgsql'):
+	print "Going to use PostGIS database '%s' on %s" % (options.database, options.host)
+	print "Using database user %s with password %s" % (options.username, options.password)
 else:
-	print "filetype is probably not supported, use .gz, .bz2, .osm or .xml"
+	print "Going yo use SQLite database at %s" % path.abspath(options.outfile)
+	if path.exists(path.abspath(options.outfile)):
+		print "This file exists, tables will be overwritten if they exist"
 
-if len(sys.argv) == 3:
-	dbpath = sys.argv[2]
-	parts = path.split(dbpath)
-	if len(parts[0]) > 0:
-		if not path.exists(parts[0]):
-		#make dir
-			if not path.isdir(parts[0]):
-				os.makedirs(parts[0])
-			else:
-				print "could not create file at %s because %s is a file" % (dbpath,parts[0])
-else:
-	dbpath = 'osmhistory.db'
-
-conn = sqlite3.connect(dbpath)
+# if len(sys.argv) == 1:
+# 	print "please supply at least an input file."
+# 	usage()
+# 	exit()
+# 	
+# ourpath = sys.argv[1]
+# if not path.exists(ourpath):
+# 	print "file does not exist: %s" % ourpath
+# 	usage()
+# 	exit()
+# 
+# 
+# print "going to parse %s" % ourpath
+# 
+# if ourpath.find(".bz2") + 1:
+# 	f = bz2.BZ2File(ourpath)
+# elif ourpath.find(".gz") + 1 or ourpath.find(".gzip") + 1:
+# 	f = gzip.GzipFile(ourpath)
+# elif ourpath.find(".osm") + 1 or ourpath.find(".xml") + 1 :
+# 	f = open(ourpath)
+# else:
+# 	print "filetype is probably not supported, use .gz, .bz2, .osm or .xml"
+# 
+# if len(sys.argv) == 3:
+# 	dbpath = sys.argv[2]
+# 	parts = path.split(dbpath)
+# 	if len(parts[0]) > 0:
+# 		if not path.exists(parts[0]):
+# 		#make dir
+# 			if not path.isdir(parts[0]):
+# 				os.makedirs(parts[0])
+# 			else:
+# 				print "could not create file at %s because %s is a file" % (dbpath,parts[0])
+# else:
+# 	dbpath = 'osmhistory.db'
+f=open(path.abspath(options.infile))
+conn = sqlite3.connect(path.abspath(options.outfile))
 
 p = xml.parsers.expat.ParserCreate()
 
@@ -310,4 +332,4 @@ insert_relations(rr)
 
 print "operation took %s" % (datetime.datetime.now() - starttime)
 print "total %i nodes, %i ways, %i relations." % (nnc, wwc, rrc)
-print "sqlite file at %s is size %s" % (dbpath, size(float(path.getsize(dbpath))))
+print "sqlite file at %s is size %s" % (path.abspath(options.outfile), size(float(path.getsize(path.abspath(options.outfile)))))
