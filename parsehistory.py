@@ -12,9 +12,10 @@ import string
 import psycopg2
 import psycopg2.extras
 import argparse
+import jsonpickle
+from pymongo import Connection
 
 VERSION="0.2"
-PGSQL= False
 
 starttime = datetime.datetime.now() 
 
@@ -30,6 +31,7 @@ rr = []
 n = None
 w = None
 r = None
+mongo_path = '/data/db'
 
 def usage():
 	print '''
@@ -47,31 +49,6 @@ def dump(obj):
 	for attr in dir(obj):
 		print "obj.%s = %s" % (attr, getattr(obj, attr))
 
-def create_tables_sqlite():
-	c = conn.cursor()
-	c.execute('drop table if exists nodes')
-	c.execute('drop table if exists tags')
-	c.execute('drop table if exists ways')
-	c.execute('drop table if exists relations')
-	c.execute('drop table if exists members')
-	c.execute('create table nodes(lat real, lon real, version int, user_id int, user text, id int, timestamp integer, changeset_id integer)')
-	c.execute('create table ways(version int, user_id int, user text, id int, timestamp integer, changeset_id integer)')
-	c.execute('create table tags(feature_id int, k text, v text)')
-	c.execute('create table relations(version int, user_id int, user text, id int, timestamp integer, changeset_id integer)')
-	c.execute('create table members(relation_id int, type text, ref int, role text)')
-	conn.commit()
-	print "all tables created"
-	c.close()
-
-def create_tables_pgsql():
-	with open('pgsql_simple_schema_0.6.sql', 'r') as f: #this is the same schema that osmosis uses. 
-		sql = f.read()
-	c = conn.cursor()
-	c.execute(sql)
-	conn.commit()
-	print "all tables created"
-	c.close()
-	
 def insert_node(n): #deprecated
 	c = conn.cursor()
 	c.execute('insert into nodes values(?,?,?,?,?,?,?,?)',(n.lat,n.lon,n.version,n.user_id,n.user,n.id,n.timestamp,n.changeset_id))
@@ -84,55 +61,67 @@ def postgis_point(lon,lat):
 	return "ST_SetSRID(ST_MakePoint(%s, %s), 4326)" % (lon,lat)
 
 def insert_nodes(nn):
-	global nnc
-	c = conn.cursor()
+	global nnc,options
 	tagcount=0
-	for n in nn:
-		if PGSQL:
-			SQL = "INSERT INTO nodes VALUES(%s,%s,%s,%s,%s,%s," + postgis_point(n.lon,n.lat) + ");"
-			c.execute(SQL,(n.id,n.version,n.user_id,n.timestamp,n.changeset_id,n.tags))
-		else:
-			c.execute('insert into nodes values(?,?,?,?,?,?,?,?)',(n.lat,n.lon,n.version,n.user_id,n.user,n.id,n.timestamp,n.changeset_id))
-			for k,v in n.tags.iteritems():
-				c.execute('insert into tags values(?,?,?)',(n.id,k,v))
-				tagcount+=1
-	conn.commit()
-	c.close()
-	#print "%i nodes and %i tags inserted..." % (len(nn),tagcount)
+	if options.output != 'mongo':
+		c = conn.cursor()
+		for n in nn:
+			if options.output == 'pgsql':
+				SQL = "INSERT INTO nodes VALUES(%s,%s,%s,%s,%s,%s," + postgis_point(n.lon,n.lat) + ");"
+				c.execute(SQL,(n.id,n.version,n.user_id,n.timestamp,n.changeset_id,n.tags))
+			elif options.output == 'sqlite3':
+				c.execute('insert into nodes values(?,?,?,?,?,?,?,?)',(n.lat,n.lon,n.version,n.user_id,n.user,n.id,n.timestamp,n.changeset_id))
+				for k,v in n.tags.iteritems():
+					c.execute('insert into tags values(?,?,?)',(n.id,k,v))
+					tagcount+=1
+		conn.commit()
+		c.close()
+		#print "%i nodes and %i tags inserted..." % (len(nn),tagcount)
+	else:
+		for n in nn:
+			mongodb.nodes.insert(n.__dict__)
 	nnc += len(nn)
 	del nn[:]
 	
 def insert_ways(ww):
 	global wwc
 	tagcount = 0
-	c = conn.cursor()
-	for w in ww:
-		c.execute('insert into ways values(?,?,?,?,?,?)',(w.version,w.user_id,w.user,w.id,w.timestamp,w.changeset_id))
-		for k,v in w.tags.iteritems():
-			c.execute('insert into tags values(?,?,?)',(w.id,k,v))
-			tagcount+=1
-	conn.commit()
-	c.close()
-	#print "%i ways and %i tags inserted..." % (len(ww),tagcount)
+	if options.output != 'mongo':
+		c = conn.cursor()
+		for w in ww:
+			c.execute('insert into ways values(?,?,?,?,?,?)',(w.version,w.user_id,w.user,w.id,w.timestamp,w.changeset_id))
+			for k,v in w.tags.iteritems():
+				c.execute('insert into tags values(?,?,?)',(w.id,k,v))
+				tagcount+=1
+		conn.commit()
+		c.close()
+		#print "%i ways and %i tags inserted..." % (len(ww),tagcount)
+	else:
+		for w in ww:
+			mongodb.ways.insert(w.__dict__)
 	wwc += len(ww)
 	del ww[:]
 	
 def insert_relations(rr):
 	global rrc
 	tagcount=0
-	membercount=0
-	c = conn.cursor()
-	for r in rr:
-		c.execute('insert into relations values(?,?,?,?,?,?)',(r.version,r.user_id,r.user,r.id,r.timestamp,r.changeset_id))
-		for k,v in r.tags.iteritems():
-			c.execute('insert into tags values(?,?,?)',(r.id,k,v))
-			tagcount+=1
-		for m in r.members:
-			c.execute('insert into members values(?,?,?,?)',(r.id,m.type,m.ref,m.role))
-			membercount+=1
-	conn.commit()
-	c.close()
-	#print "%i relations, %i tags and %i members inserted..." % (len(rr),tagcount,membercount)
+	if options.output != 'mongo':
+		membercount=0
+		c = conn.cursor()
+		for r in rr:
+			c.execute('insert into relations values(?,?,?,?,?,?)',(r.version,r.user_id,r.user,r.id,r.timestamp,r.changeset_id))
+			for k,v in r.tags.iteritems():
+				c.execute('insert into tags values(?,?,?)',(r.id,k,v))
+				tagcount+=1
+			for m in r.members:
+				c.execute('insert into members values(?,?,?,?)',(r.id,m.type,m.ref,m.role))
+				membercount+=1
+		conn.commit()
+		c.close()
+		#print "%i relations, %i tags and %i members inserted..." % (len(rr),tagcount,membercount)
+	else:
+		for r in rr:
+			mongodb.relations.insert(r.__dict__)
 	rrc += len(rr)
 	del rr[:]
 
@@ -262,6 +251,7 @@ def end_element(name):
 				seconds,
 				size(fsize)
 			))
+		sys.stdout.flush()
 		insert_nodes(nn)
 		insert_ways(ww)
 		insert_relations(rr)
@@ -278,29 +268,58 @@ parser.add_argument('-U','--username',metavar='username',default='osm',help='Pos
 parser.add_argument('-W','--password',metavar='password',default='osm',help='PostgreSQL database password')
 parser.add_argument('-H','--host',metavar='host',default='localhost',help='PostgreSQL database host')
 parser.add_argument('-P','--port',metavar='port',help='PostgreSQL database port')
-parser.add_argument('-O','--output',metavar='outputformat',default='sqlite',choices=('sqlite','pgsql'),help='Output format (SQLite or PostGIS)')
+parser.add_argument('-O','--output',metavar='outputformat',default='sqlite',choices=('sqlite','pgsql','mongo'),help='Output format (SQLite or PostGIS)')
 parser.add_argument('-k','--hstore',action='store_true',help='Add hstore column for tags, only for PostGIS')
+parser.add_argument('--mongo_path',metavar='mongo_path',help='Alternate path for mongoDB (default: %s)' % mongo_path)
 
 options=parser.parse_args()
+
+f=open(path.abspath(options.infile))
 
 if(options.output=='pgsql'):
 	print "Going to use PostGIS database '%s' on %s" % (options.database, options.host)
 	print "Using database user %s with password %s" % (options.username, options.password)
-else:
+	conn_string = "host=%s dbname=%s user=%s password=%s" % (options.host,options.database,options.username,options.password)
+	conn = psycopg2.connect(conn_string)
+	psycopg2.extras.register_hstore(conn)
+
+	with open('pgsql_simple_schema_0.6.sql', 'r') as f: #this is the same schema that osmosis uses. 
+		sql = f.read()
+	c = conn.cursor()
+	c.execute(sql)
+	conn.commit()
+	print "all PgSQL tables created"
+	c.close()
+elif(options.output=='sqlite3'):
 	print "Going yo use SQLite database at %s" % path.abspath(options.outfile)
 	if path.exists(path.abspath(options.outfile)):
 		print "This file exists, tables will be overwritten if they exist"
-
-f=open(path.abspath(options.infile))
-conn = sqlite3.connect(path.abspath(options.outfile))
+	conn = sqlite3.connect(path.abspath(options.outfile))
+	sql = """DROP TABLE IF EXISTS nodes;
+DROP TABLE IF EXISTS tags;
+DROP TABLE IF EXISTS ways;
+DROP TABLE IF EXISTS relations;
+DROP TABLE IF EXISTS members;
+CREATE TABLE nodes(lat real, lon real, version int, user_id int, user text, id int, timestamp integer, changeset_id integer);
+CREATE TABLE ways(version int, user_id int, user text, id int, timestamp integer, changeset_id integer);
+CREATE TABLE tags(feature_id int, k text, v text);
+CREATE TABLE relations(version int, user_id int, user text, id int, timestamp integer, changeset_id integer);
+CREATE TABLE members(relation_id int, type text, ref int, role text);"""
+	c = conn.cursor()
+	c.executescript(sql)
+	print "all sqlite3 tables created"
+	c.close()
+elif(options.output=='mongo'):
+	print "Going to use mongoDB at %s" % mongo_path
+	conn = Connection()
+	conn.drop_database('osm')
+	mongodb = conn.osm
 
 p = xml.parsers.expat.ParserCreate()
 
 p.StartElementHandler = start_element
 p.EndElementHandler = end_element
 p.CharacterDataHandler = char_data
-
-create_tables_sqlite()
 
 p.ParseFile(f)
 

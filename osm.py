@@ -131,7 +131,7 @@ class node(object):
 	def delvisible(self):
 		del self._visible
 	visible = property(getvisible, setvisible, delvisible, "visible")
-	
+
 class way(object):
 	def __init__(self):
 		self._version = None
