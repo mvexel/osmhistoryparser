@@ -12,8 +12,8 @@ import string
 import psycopg2
 import psycopg2.extras
 import argparse
-import jsonpickle
 from pymongo import Connection
+import couchdb
 
 VERSION="0.2"
 
@@ -32,6 +32,8 @@ n = None
 w = None
 r = None
 mongo_path = '/data/db'
+couchdb_url = 'localhost'
+couchdb_port = '5894'
 
 def usage():
 	print '''
@@ -63,7 +65,13 @@ def postgis_point(lon,lat):
 def insert_nodes(nn):
 	global nnc,options
 	tagcount=0
-	if options.output != 'mongo':
+	if options.output == 'mongodb':
+		for n in nn:
+			mongodb.nodes.insert(todict(n))
+	elif options.output == 'couchdb':
+		for n in nn:
+			couch_osmdb.save(todict(n))
+	else:
 		c = conn.cursor()
 		for n in nn:
 			if options.output == 'pgsql':
@@ -77,16 +85,19 @@ def insert_nodes(nn):
 		conn.commit()
 		c.close()
 		#print "%i nodes and %i tags inserted..." % (len(nn),tagcount)
-	else:
-		for n in nn:
-			mongodb.nodes.insert(n.__dict__)
 	nnc += len(nn)
 	del nn[:]
 	
 def insert_ways(ww):
 	global wwc
 	tagcount = 0
-	if options.output != 'mongo':
+	if options.output == 'mongodb':
+		for w in ww:
+			mongodb.ways.insert(todict(w))
+	elif options.output == 'couchdb':
+		for w in ww:
+			couch_osmdb.save(todict(w))
+	else:
 		c = conn.cursor()
 		for w in ww:
 			c.execute('insert into ways values(?,?,?,?,?,?)',(w.version,w.user_id,w.user,w.id,w.timestamp,w.changeset_id))
@@ -96,16 +107,19 @@ def insert_ways(ww):
 		conn.commit()
 		c.close()
 		#print "%i ways and %i tags inserted..." % (len(ww),tagcount)
-	else:
-		for w in ww:
-			mongodb.ways.insert(w.__dict__)
 	wwc += len(ww)
 	del ww[:]
 	
 def insert_relations(rr):
 	global rrc
 	tagcount=0
-	if options.output != 'mongo':
+	if options.output == 'mongodb':
+		for r in rr:
+			mongodb.relations.insert(todict(r))
+	elif options.output == 'couchdb':
+		for r in rr:
+			couch_osmdb.save(todict(r))
+	else:
 		membercount=0
 		c = conn.cursor()
 		for r in rr:
@@ -119,11 +133,26 @@ def insert_relations(rr):
 		conn.commit()
 		c.close()
 		#print "%i relations, %i tags and %i members inserted..." % (len(rr),tagcount,membercount)
-	else:
-		for r in rr:
-			mongodb.relations.insert(r.__dict__)
 	rrc += len(rr)
 	del rr[:]
+
+# http://stackoverflow.com/questions/1036409/recursively-convert-python-object-graph-to-dictionary/1118038#1118038
+def todict(obj, classkey=None):
+    if isinstance(obj, dict):
+        for k in obj.keys():
+            obj[k] = todict(obj[k], classkey)
+        return obj
+    elif hasattr(obj, "__iter__"):
+        return [todict(v, classkey) for v in obj]
+    elif hasattr(obj, "__dict__"):
+        data = dict([(key, todict(value, classkey)) 
+            for key, value in obj.__dict__.iteritems() 
+            if not callable(value) and not key.startswith('_')])
+        if classkey is not None and hasattr(obj, "__class__"):
+            data[classkey] = obj.__class__.__name__
+        return data
+    else:
+        return obj
 
 def start_element(name, attrs):
 	global n,parsing_node,w,parsing_way,r,parsing_relation
@@ -264,13 +293,16 @@ parser = argparse.ArgumentParser(description='OpenStreetMap full history planet 
 parser.add_argument('infile')
 parser.add_argument('outfile',nargs='?', default='osm.db',help='path to SQLite data file (SQLite only)')
 parser.add_argument('-d','--database',default='osm')
-parser.add_argument('-U','--username',metavar='username',default='osm',help='PostgreSQL database user')
-parser.add_argument('-W','--password',metavar='password',default='osm',help='PostgreSQL database password')
-parser.add_argument('-H','--host',metavar='host',default='localhost',help='PostgreSQL database host')
-parser.add_argument('-P','--port',metavar='port',help='PostgreSQL database port')
-parser.add_argument('-O','--output',metavar='outputformat',default='sqlite',choices=('sqlite','pgsql','mongo'),help='Output format (SQLite or PostGIS)')
+parser.add_argument('-U','--username',default='osm',help='PostgreSQL database user')
+parser.add_argument('-W','--password',default='osm',help='PostgreSQL database password')
+parser.add_argument('-H','--host',default='localhost',help='PostgreSQL database host')
+parser.add_argument('-P','--port',help='PostgreSQL database port')
+parser.add_argument('-O','--output',default='sqlite',choices=('sqlite','pgsql','mongodb','couchdb'),help='Output format (SQLite or PostGIS)')
 parser.add_argument('-k','--hstore',action='store_true',help='Add hstore column for tags, only for PostGIS')
-parser.add_argument('--mongo_path',metavar='mongo_path',help='Alternate path for mongoDB (default: %s)' % mongo_path)
+parser.add_argument('--mongo_path',help='Alternate path for mongoDB (default: %s)' % mongo_path)
+parser.add_argument('--couchdb_url',help='CouchDB server URL (default: %s)' % couchdb_url)
+parser.add_argument('--couchdb_port',help='CouchDB server port (default: %s)' % couchdb_port)
+
 
 options=parser.parse_args()
 
@@ -309,11 +341,18 @@ CREATE TABLE members(relation_id int, type text, ref int, role text);"""
 	c.executescript(sql)
 	print "all sqlite3 tables created"
 	c.close()
-elif(options.output=='mongo'):
+elif(options.output=='mongodb'):
 	print "Going to use mongoDB at %s" % mongo_path
 	conn = Connection()
+	#!!! an append option should be implemented here - for now we just drop the existing db
 	conn.drop_database('osm')
 	mongodb = conn.osm
+elif(options.output=='couchdb'):
+	print "Going to use CouchDB"
+	couch = couchdb.Server()
+	#!!! an append option should be implemented here - for now we just drop the existing db 
+	couch.delete('osm')
+	couch_osmdb = couch.create('osm') 
 
 p = xml.parsers.expat.ParserCreate()
 
@@ -329,4 +368,5 @@ insert_relations(rr)
 
 print "operation took %s" % (datetime.datetime.now() - starttime)
 print "total %i nodes, %i ways, %i relations." % (nnc, wwc, rrc)
-print "sqlite file at %s is size %s" % (path.abspath(options.outfile), size(float(path.getsize(path.abspath(options.outfile)))))
+if options.output == 'sqlite3':
+	print "sqlite file at %s is size %s" % (path.abspath(options.outfile), size(float(path.getsize(path.abspath(options.outfile)))))
