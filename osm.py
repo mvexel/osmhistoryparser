@@ -42,6 +42,7 @@ class node(object):
 		self._user_id = None
 		self._user = None
 		self._id = None
+		self._visible = None
 		self._tags = {}
 		self._timestamp = None
 		self._changeset_id = None
@@ -50,7 +51,7 @@ class node(object):
 	def getlat(self):
 		return self._lat
 	def setlat(self, value):
-		self._lat = value
+		self._lat = float(value)
 	def dellat(self):
 		del self._lat
 	lat = property(getlat, setlat, dellat, "latitude")
@@ -58,7 +59,7 @@ class node(object):
 	def getlon(self):
 		return self._lon
 	def setlon(self, value):
-		self._lon = value
+		self._lon = float(value)
 	def dellon(self):
 		del self._lon
 	lon = property(getlon, setlon, dellon, "longitude")
@@ -94,6 +95,14 @@ class node(object):
 	def delid(self):
 		del self._id
 	id = property(getid, setid, delid, "node id")
+
+	def getvisible(self):
+		return self._visible
+	def setvisible(self, value):
+		self._visible = value
+	def delvisible(self):
+		del self._visible
+	visible = property(getvisible, setvisible, delvisible, "visibility")
 
 	@property
 	def tags(self):
@@ -138,6 +147,7 @@ class way(object):
 		self._user_id = None
 		self._user = None
 		self._id = None
+		self._visible = None
 		self._tags = {}
 		self._noderefs = []
 		self._timestamp = None
@@ -176,6 +186,14 @@ class way(object):
 		del self._id
 	id = property(getid, setid, delid, "node id")
 
+	def getvisible(self):
+		return self._visible
+	def setvisible(self, value):
+		self._visible = value
+	def delvisible(self):
+		del self._visible
+	visible = property(getvisible, setvisible, delvisible, "visibility")
+
 	@property
 	def tags(self):
 		"""I'm the 'tag' property."""
@@ -192,10 +210,9 @@ class way(object):
 	def getnoderefs(self):
 		return self._noderefs
 	def setnoderefs(self, value):
-		#print "appending " , value , " to noderefs"
-		self._noderefs.append(value)
+		self._noderefs = value
 	def delnoderefs(self, value):
-		self._noderefs.remove(value)
+		del self._noderefs[:]
 	noderefs = property(getnoderefs, setnoderefs, delnoderefs, "noderefs")
 
 	def gettimestamp(self):
@@ -228,6 +245,7 @@ class relation(object):
 		self._user_id = None
 		self._user = None
 		self._id = None
+		self._visible = None
 		self._tags = {}
 		self._members = []
 		self._timestamp = None
@@ -264,6 +282,14 @@ class relation(object):
 	def delid(self):
 		del self._id
 	id = property(getid, setid, delid, "node id")
+
+	def getvisible(self):
+		return self._visible
+	def setvisible(self, value):
+		self._visible = value
+	def delvisible(self):
+		del self._visible
+	visible = property(getvisible, setvisible, delvisible, "visibility")
 
 	@property
 	def tags(self):

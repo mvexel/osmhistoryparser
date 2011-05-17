@@ -1,3 +1,6 @@
+#!/usr/local/bin/python
+# -*- coding: UTF-8 -*-
+
 import xml.parsers.expat
 import datetime
 import iso8601
@@ -11,13 +14,14 @@ import gzip
 import string
 import psycopg2
 import psycopg2.extras
+import ppygis
 import argparse
-from pymongo import Connection
-import couchdb
+import logging
 
 VERSION="0.2"
-
 starttime = datetime.datetime.now() 
+NAME="parsehistory"
+DEBUG=True
 
 parsing_node=False
 parsing_way=False
@@ -28,12 +32,14 @@ rrc = 0
 nn = []
 ww = []
 rr = []
+noderefs = []
 n = None
 w = None
 r = None
-mongo_path = '/data/db'
-couchdb_url = 'localhost'
-couchdb_port = '5894'
+
+FORMAT = '%(asctime)-15s %(message)s'
+logging.basicConfig(format=FORMAT,filename='%s.log' % NAME,level=logging.DEBUG)
+
 
 def usage():
 	print '''
@@ -48,8 +54,10 @@ working directory.
 	''' % (sys.argv[0])
 
 def dump(obj):
+	d = ""
 	for attr in dir(obj):
-		print "obj.%s = %s" % (attr, getattr(obj, attr))
+		d += "obj.%s = %s\n" % (attr, getattr(obj, attr))
+	return d
 
 def insert_node(n): #deprecated
 	c = conn.cursor()
@@ -64,75 +72,42 @@ def postgis_point(lon,lat):
 
 def insert_nodes(nn):
 	global nnc,options
-	tagcount=0
-	if options.output == 'mongodb':
-		for n in nn:
-			mongodb.nodes.insert(todict(n))
-	elif options.output == 'couchdb':
-		for n in nn:
-			couch_osmdb.save(todict(n))
-	else:
-		c = conn.cursor()
-		for n in nn:
-			if options.output == 'pgsql':
-				SQL = "INSERT INTO nodes VALUES(%s,%s,%s,%s,%s,%s," + postgis_point(n.lon,n.lat) + ");"
-				c.execute(SQL,(n.id,n.version,n.user_id,n.timestamp,n.changeset_id,n.tags))
-			elif options.output == 'sqlite3':
-				c.execute('insert into nodes values(?,?,?,?,?,?,?,?)',(n.lat,n.lon,n.version,n.user_id,n.user,n.id,n.timestamp,n.changeset_id))
-				for k,v in n.tags.iteritems():
-					c.execute('insert into tags values(?,?,?)',(n.id,k,v))
-					tagcount+=1
-		conn.commit()
-		c.close()
-		#print "%i nodes and %i tags inserted..." % (len(nn),tagcount)
+	c = conn.cursor()
+	for n in nn:
+#		logging.debug(dump(n))
+		if options.output == 'pgsql':
+			c.execute('insert into nodes values(%s,%s,%s,%s,%s,%s,%s,%s)',(n.id,n.version,n.user_id,n.timestamp,n.changeset_id,n.visible,n.tags,ppygis.Point(n.lon,n.lat,None,None,4326)))
+		elif options.output == 'sqlite3':
+			c.execute('insert into nodes values(?,?,?,?,?,?,?,?)',(n.lat,n.lon,n.version,n.user_id,n.user,n.id,n.timestamp,n.changeset_id))
+			for k,v in n.tags.iteritems():
+				c.execute('insert into tags values(?,?,?)',(n.id,k,v))
+	conn.commit()
+	c.close()
 	nnc += len(nn)
 	del nn[:]
 	
 def insert_ways(ww):
 	global wwc
-	tagcount = 0
-	if options.output == 'mongodb':
-		for w in ww:
-			mongodb.ways.insert(todict(w))
-	elif options.output == 'couchdb':
-		for w in ww:
-			couch_osmdb.save(todict(w))
-	else:
-		c = conn.cursor()
-		for w in ww:
-			c.execute('insert into ways values(?,?,?,?,?,?)',(w.version,w.user_id,w.user,w.id,w.timestamp,w.changeset_id))
-			for k,v in w.tags.iteritems():
-				c.execute('insert into tags values(?,?,?)',(w.id,k,v))
-				tagcount+=1
-		conn.commit()
-		c.close()
-		#print "%i ways and %i tags inserted..." % (len(ww),tagcount)
+	c = conn.cursor()
+	for w in ww:
+		logging.debug("noderefs for %i is %s" % (w.id, noderefs))
+		c.execute('insert into ways values(%s,%s,%s,%s,%s,%s,%s,%s)',(w.id,w.version,w.user_id,w.timestamp,w.changeset_id,w.visible,w.tags,w.noderefs))
+		for k,v in w.tags.iteritems():
+			logging.debug("this tag needs to be meaningfully inserted: (%s,%s)" % (k,v))
+	conn.commit()
+	c.close()
 	wwc += len(ww)
 	del ww[:]
 	
 def insert_relations(rr):
 	global rrc
-	tagcount=0
-	if options.output == 'mongodb':
-		for r in rr:
-			mongodb.relations.insert(todict(r))
-	elif options.output == 'couchdb':
-		for r in rr:
-			couch_osmdb.save(todict(r))
-	else:
-		membercount=0
-		c = conn.cursor()
-		for r in rr:
-			c.execute('insert into relations values(?,?,?,?,?,?)',(r.version,r.user_id,r.user,r.id,r.timestamp,r.changeset_id))
-			for k,v in r.tags.iteritems():
-				c.execute('insert into tags values(?,?,?)',(r.id,k,v))
-				tagcount+=1
-			for m in r.members:
-				c.execute('insert into members values(?,?,?,?)',(r.id,m.type,m.ref,m.role))
-				membercount+=1
-		conn.commit()
-		c.close()
-		#print "%i relations, %i tags and %i members inserted..." % (len(rr),tagcount,membercount)
+	c = conn.cursor()
+	for r in rr:
+		c.execute('insert into relations values(%s,%s,%s,%s,%s,%s,%s)',(r.id,r.version,r.user_id,r.timestamp,r.changeset_id,r.visible,r.tags))
+		for m in r.members:
+			c.execute('insert into members values(%s,%s,%s,%s)',(r.id,m.id,m.type,m.ref,m.role))
+	conn.commit()
+	c.close()
 	rrc += len(rr)
 	del rr[:]
 
@@ -155,44 +130,40 @@ def todict(obj, classkey=None):
         return obj
 
 def start_element(name, attrs):
-	global n,parsing_node,w,parsing_way,r,parsing_relation
+	global n,parsing_node,w,parsing_way,r,parsing_relation,noderefs
 	if name == 'node':
-		#print 'node start:', attrs['id']
-		#print 'node:', attrs
 		parsing_node=True
 		n = node();
-		n.lat = 'lat' in attrs and attrs['lat']
-		n.lon = 'lon' in attrs and attrs['lon']
-		n.version = 'version' in attrs and attrs['version']
-		n.user_id = 'user_id' in attrs and attrs['user_id']
-		n.user = 'user' in attrs and attrs['user']
-		n.id = 'id' in attrs and attrs['id']
+		n.lat = 'lat' in attrs and float(attrs['lat'])
+		n.lon = 'lon' in attrs and float(attrs['lon'])
+		n.version = 'version' in attrs and int(attrs['version'])
+		n.user_id = 'uid' in attrs and int(attrs['uid'])
+		n.user = 'user' in attrs and unicode(attrs['user'])
+		n.id = 'id' in attrs and int(attrs['id'])
+		n.visible = 'visible' in attrs and attrs['visible'] == "true"
 		n.timestamp = 'timestamp' in attrs and iso8601.parse_date(attrs['timestamp'])
-		n.changeset_id = 'changeset_id' in attrs and attrs['changeset_id']
-	if name == 'way':
-		#print 'way start:', attrs['id']
-		#print 'node:', attrs
+		n.changeset_id = 'changeset' in attrs and int(attrs['changeset'])
+	elif name == 'way':
 		parsing_way=True
 		w = way();
-		w.version = 'version' in attrs and attrs['version']
-		w.user_id = 'uit' in attrs and attrs['user_id']
-		w.user = 'user' in attrs and attrs['user']
-		w.id = 'id' in attrs and attrs['id']
+		w.version = 'version' in attrs and int(attrs['version'])
+		w.user_id = 'uid' in attrs and int(attrs['uid'])
+		w.user = 'user' in attrs and unicode(attrs['user'])
+		w.id = 'id' in attrs and int(attrs['id'])
+		w.visible = 'visible' in attrs and attrs['visible'] == "true"
 		w.timestamp = 'timestamp' in attrs and iso8601.parse_date(attrs['timestamp'])
-		w.changeset_id = 'changeset_id' in attrs and attrs['changeset_id']
-	if name == 'relation':
-		#print 'relation start:', attrs['id']
-		#print 'node:', attrs
+		w.changeset_id = 'changeset' in attrs and int(attrs['changeset'])
+	elif name == 'relation':
 		parsing_relation=True
 		r = relation();
-		r.version = 'version' in attrs and attrs['version']
-		r.user_id = 'uit' in attrs and attrs['user_id']
-		r.user = 'user' in attrs and attrs['user']
-		r.id = 'id' in attrs and attrs['id']
+		r.version = 'version' in attrs and int(attrs['version'])
+		r.user_id = 'uid' in attrs and int(attrs['uid'])
+		r.user = 'user' in attrs and unicode(attrs['user'])
+		r.id = 'id' in attrs and int(attrs['id'])
+		r.visible = 'visible' in attrs and attrs['visible'] == "true"
 		r.timestamp = 'timestamp' in attrs and iso8601.parse_date(attrs['timestamp'])
-		r.changeset_id = 'changeset_id' in attrs and attrs['changeset_id']
-	if name == 'tag':
-		#print '\ttag start:', attrs['k']
+		r.changeset_id = 'changeset' in attrs and int(attrs['changeset'])
+	elif name == 'tag':
 		if parsing_node and not n:
 			print "\ttag outside of node"
 		elif parsing_way and not w:
@@ -208,13 +179,13 @@ def start_element(name, attrs):
 				p = r
 			if 'k' in attrs and 'v' in attrs and p:
 				p.tags[attrs['k']] = attrs['v']
-	if name == 'nd' and parsing_way:
+	elif name == 'nd' and parsing_way:
 		#print '\tnoderef start:', attrs['ref']
 		if not w:
 			print "\tnoderef outside of way"
 		else:
-			w.noderefs = 'ref' in attrs and attrs['ref']
-	if name == 'member' and parsing_relation:
+			noderefs.append('ref' in attrs and int(attrs['ref']))
+	elif name == 'member' and parsing_relation:
 		#print '\tmember start:', attrs['ref']
 		if not r:
 			print "\tnmember outside of relation"
@@ -226,7 +197,7 @@ def start_element(name, attrs):
 			r.members.append(m)
 			
 def end_element(name):
-	global n,parsing_node,w,parsing_way,r,parsing_relation,nn,nnc,ww,wwc,rr,rrc,options
+	global n,parsing_node,w,parsing_way,r,parsing_relation,nn,nnc,ww,wwc,rr,rrc,options,noderefs
 	if name == 'node':
 		#print 'node end:', n.id
 		#dump(n)
@@ -234,14 +205,16 @@ def end_element(name):
 		nn.append(n)		
 		parsing_node=False
 		n = None
-	if name == 'way':
+	elif name == 'way':
 		#print 'way end:', w.id
 		#dump(n)
 		#insert_way(w)
+		w.noderefs = noderefs
 		ww.append(w)
-		parsing_way=False
+		parsing_way = False
+		del noderefs[:]
 		w = None
-	if name == 'relation':
+	elif name == 'relation':
 		#print 'relation end:', r.id
 		#dump(r)
 		#insert_way(r)
@@ -297,11 +270,8 @@ parser.add_argument('-U','--username',default='osm',help='PostgreSQL database us
 parser.add_argument('-W','--password',default='osm',help='PostgreSQL database password')
 parser.add_argument('-H','--host',default='localhost',help='PostgreSQL database host')
 parser.add_argument('-P','--port',help='PostgreSQL database port')
-parser.add_argument('-O','--output',default='sqlite',choices=('sqlite','pgsql','mongodb','couchdb'),help='Output format (SQLite or PostGIS)')
+parser.add_argument('-O','--output',default='sqlite',choices=('sqlite','pgsql'),help='Where to write the OSM data to: SQLite or PostgreSQL/PostGIS')
 parser.add_argument('-k','--hstore',action='store_true',help='Add hstore column for tags, only for PostGIS')
-parser.add_argument('--mongo_path',help='Alternate path for mongoDB (default: %s)' % mongo_path)
-parser.add_argument('--couchdb_url',help='CouchDB server URL (default: %s)' % couchdb_url)
-parser.add_argument('--couchdb_port',help='CouchDB server port (default: %s)' % couchdb_port)
 
 
 options=parser.parse_args()
@@ -313,14 +283,16 @@ if(options.output=='pgsql'):
 	print "Using database user %s with password %s" % (options.username, options.password)
 	conn_string = "host=%s dbname=%s user=%s password=%s" % (options.host,options.database,options.username,options.password)
 	conn = psycopg2.connect(conn_string)
+	conn.set_client_encoding('UTF8')
 	psycopg2.extras.register_hstore(conn)
 
-	with open('pgsql_simple_schema_0.6.sql', 'r') as f: #this is the same schema that osmosis uses. 
-		sql = f.read()
+	with open('pgsql_simple_schema_0.6-hist.sql', 'r') as sqlf: #this is the same schema that osmosis uses. 
+		sql = sqlf.read()
 	c = conn.cursor()
 	c.execute(sql)
 	conn.commit()
 	print "all PgSQL tables created"
+	logging.debug("all pgsql tables created, ready for import")
 	c.close()
 elif(options.output=='sqlite3'):
 	print "Going yo use SQLite database at %s" % path.abspath(options.outfile)
@@ -341,26 +313,17 @@ CREATE TABLE members(relation_id int, type text, ref int, role text);"""
 	c.executescript(sql)
 	print "all sqlite3 tables created"
 	c.close()
-elif(options.output=='mongodb'):
-	print "Going to use mongoDB at %s" % mongo_path
-	conn = Connection()
-	#!!! an append option should be implemented here - for now we just drop the existing db
-	conn.drop_database('osm')
-	mongodb = conn.osm
-elif(options.output=='couchdb'):
-	print "Going to use CouchDB"
-	couch = couchdb.Server()
-	#!!! an append option should be implemented here - for now we just drop the existing db 
-	couch.delete('osm')
-	couch_osmdb = couch.create('osm') 
-
+	
 p = xml.parsers.expat.ParserCreate()
+logging.debug("expat parser created")
 
 p.StartElementHandler = start_element
 p.EndElementHandler = end_element
 p.CharacterDataHandler = char_data
 
+logging.debug("about to parse %s" % f.name)
 p.ParseFile(f)
+logging.debug("parsed %s" % f.name)
 
 insert_nodes(nn)
 insert_ways(ww)
