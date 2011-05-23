@@ -1,39 +1,3 @@
-class dictproperty(object):
-
-	class _proxy(object):
-
-		def __init__(self, obj, fget, fset, fdel):
-			self._obj = obj
-			self._fget = fget
-			self._fset = fset
-			self._fdel = fdel
-
-		def __getitem__(self, key):
-			if self._fget is None:
-				raise TypeError, "can't read item"
-			return self._fget(self._obj, key)
-
-		def __setitem__(self, key, value):
-			if self._fset is None:
-				raise TypeError, "can't set item"
-			self._fset(self._obj, key, value)
-
-		def __delitem__(self, key):
-			if self._fdel is None:
-				raise TypeError, "can't delete item"
-			self._fdel(self._obj, key)
-
-	def __init__(self, fget=None, fset=None, fdel=None, doc=None):
-		self._fget = fget
-		self._fset = fset
-		self._fdel = fdel
-		self.__doc__ = doc
-
-	def __get__(self, obj, objtype=None):
-		if obj is None:
-			return self
-		return self._proxy(obj, self._fget, self._fset, self._fdel)
-
 class node(object):
 	def __init__(self):
 		self._lat = None
@@ -342,6 +306,7 @@ class member(object):
 		self._type = None
 		self._ref = None
 		self._role = None
+		self._sequence_id = None
 
 	def gettype(self):
 		return self._type
@@ -367,3 +332,10 @@ class member(object):
 		del self._role
 	role = property(getrole, setrole, delrole, "role")
 
+	def getsequence_id(self):
+		return self._sequence_id
+	def setsequence_id(self, value):
+		self._sequence_id = value
+	def delsequence_id(self):
+		del self._sequence_id
+	sequence_id = property(getsequence_id, setsequence_id, delsequence_id, "sequence id")

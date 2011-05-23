@@ -80,7 +80,7 @@ CREATE TABLE relations (
 CREATE TABLE relation_members (
     relation_id bigint NOT NULL,
     member_id bigint NOT NULL,
-    member_type character(1) NOT NULL,
+    member_type character(255) NOT NULL,
     member_role text NOT NULL,
     sequence_id int NOT NULL
 );
@@ -99,7 +99,7 @@ ALTER TABLE ONLY nodes ADD CONSTRAINT pk_nodes PRIMARY KEY (id,version);
 
 ALTER TABLE ONLY ways ADD CONSTRAINT pk_ways PRIMARY KEY (id,version);
 
-ALTER TABLE ONLY way_nodes ADD CONSTRAINT pk_way_nodes PRIMARY KEY (way_id, sequence_id);
+ALTER TABLE ONLY way_nodes ADD CONSTRAINT pk_way_nodes PRIMARY KEY (way_id, way_version, sequence_id);
 
 ALTER TABLE ONLY relations ADD CONSTRAINT pk_relations PRIMARY KEY (id,version);
 
