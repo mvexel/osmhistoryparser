@@ -1,6 +1,6 @@
-/node.pyc
-/osm.pyc
-/osmhistory.db
-/test_osm.xml
-/osm.db
+/*.pyc
+/*.log
+/*.db
 /hstoretest.py
+/*.osh
+/.DS_Store
